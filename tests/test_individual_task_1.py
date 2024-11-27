@@ -1,12 +1,12 @@
 import os
 import sqlite3
-import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
+
 from src.individual_task_1 import (
     ConnectError,
-    Train,
     add_train,
     connect_db,
     find_train,
@@ -16,107 +16,92 @@ from src.individual_task_1 import (
 )
 
 
-class TestTrainManagement(unittest.TestCase):
-    def setUp(self):
-        """Создает временную базу данных перед каждым тестом."""
-        self.db_name = "test_trains"
-        self.conn = connect_db(self.db_name)
-        self.test_data = [
-            Train("001A", "Moscow", "10:30", "Leningradsky"),
-            Train("002B", "Saint Petersburg", "14:00", "Moscow"),
-        ]
-
-    def tearDown(self):
-        """Удаляет временную базу данных после каждого теста."""
-        self.conn.close()
-        db_path = f"data/{self.db_name}.db"
-        if os.path.exists(db_path):
-            os.remove(db_path)
-
-    def test_connect_db(self):
+class TestTrainManagement:
+    def test_connect_db(self, setup_db):
         """Проверяет успешное подключение к базе данных."""
-        self.assertIsInstance(self.conn, sqlite3.Connection)
+        conn = setup_db
+        assert isinstance(conn, sqlite3.Connection)
 
-    def test_add_train(self):
+    def test_add_train(self, setup_db, test_data):
         """Тестирует добавление нового поезда в базу данных."""
-        train = self.test_data[0]
+        train = test_data[0]
         result = add_train(
-            self.conn,
+            setup_db,
             train.destination,
             train.number,
             train.time,
             train.station_name,
         )
-        self.assertIsNotNone(result)
-        self.assertEqual(result[0], train.number)
+        assert result is not None
+        assert result[0] == train.number
 
-    def test_add_duplicate_train(self):
+    def test_add_duplicate_train(self, setup_db, test_data):
         """Проверяет попытку добавления дублирующего номера поезда."""
-        train = self.test_data[0]
+        train = test_data[0]
         add_train(
-            self.conn,
+            setup_db,
             train.destination,
             train.number,
             train.time,
             train.station_name,
         )
         result = add_train(
-            self.conn,
+            setup_db,
             train.destination,
             train.number,
             train.time,
             train.station_name,
         )
-        self.assertIsNone(result)
+        assert result is None
 
-    def test_list_trains(self):
+    def test_list_trains(self, setup_db, test_data):
         """Проверяет извлечение всех поездов из базы данных."""
-        for train in self.test_data:
+        for train in test_data:
             add_train(
-                self.conn,
+                setup_db,
                 train.destination,
                 train.number,
                 train.time,
                 train.station_name,
             )
-        trains = list_trains(self.conn)
-        self.assertEqual(len(trains), len(self.test_data))
-        self.assertEqual(trains[0].number, self.test_data[0].number)
+        trains = list_trains(setup_db)
+        assert len(trains) == len(test_data)
+        assert trains[0].number == test_data[0].number
 
-    def test_find_train(self):
+    def test_find_train(self, setup_db, test_data):
         """Тестирует поиск поезда по номеру."""
-        train = self.test_data[0]
+        train = test_data[0]
         add_train(
-            self.conn,
+            setup_db,
             train.destination,
             train.number,
             train.time,
             train.station_name,
         )
-        result = find_train(self.conn, train.number)
-        self.assertIsNotNone(result)
-        self.assertEqual(result[0], train.number)
+        result = find_train(setup_db, train.number)
+        assert result is not None
+        assert result[0] == train.number
 
-    def test_save_to_xml(self):
+    def test_save_to_xml(self, test_data):
         """Тестирует сохранение поездов в XML-файл."""
         filename = "test_trains.xml"
-        save_to_xml(self.test_data, filename)
-        self.assertTrue(Path(filename).exists())
+        save_to_xml(test_data, filename)
+        assert Path(filename).exists()
         tree = ET.parse(filename)
         root = tree.getroot()
-        self.assertEqual(len(root.findall("train")), len(self.test_data))
+        assert len(root.findall("train")) == len(test_data)
         os.remove(filename)
 
-    def test_load_from_xml(self):
+    def test_load_from_xml(self, test_data):
         """Тестирует загрузку поездов из XML-файла."""
         filename = "test_trains.xml"
-        save_to_xml(self.test_data, filename)
+        save_to_xml(test_data, filename)
         loaded_trains = load_from_xml(filename)
-        self.assertEqual(len(loaded_trains), len(self.test_data))
-        self.assertEqual(loaded_trains[0].number, self.test_data[0].number)
+        assert len(loaded_trains) == len(test_data)
+        assert loaded_trains[0].number == test_data[0].number
         os.remove(filename)
 
     def test_connection_error(self):
         """Проверяет обработку ошибки подключения."""
-        with self.assertRaises(ConnectError):
+        with pytest.raises(ConnectError):
             connect_db("nonexistent_path/test")
